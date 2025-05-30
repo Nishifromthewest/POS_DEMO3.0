@@ -1,0 +1,19 @@
+Restaurant Bill
+""
+Table Number: 2
+Order Taken By: Nishi
+Date: 2025-05-30 19:50:07
+""
+Item,Quantity,Price,Total
+Miso Soup,1,€4.50,€4.50
+Miso Soup,1,€4.50,€4.50
+Miso Soup,1,€4.50,€4.50
+""
+Subtotal,,,€13.50
+Tip,,,€0.00
+Total,,,€13.50
+""
+Payment Details
+Payment Method: PIN
+""
+Thank you for your business!

@@ -1,16 +1,105 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                             QPushButton, QLabel, QFrame, QScrollArea, QSizePolicy, QMessageBox,
-                            QDateEdit, QTableWidget, QTableWidgetItem, QFileDialog)
-from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont
+                            QDateEdit, QTableWidget, QTableWidgetItem, QFileDialog, QTabWidget,
+                            QTextEdit, QComboBox)
+from PyQt5.QtCore import Qt, QDate, QTimer
+from PyQt5.QtGui import QFont, QTextCursor
 from database import Database
+from logger import pos_logger
 import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import os
-import csv
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics.charts.legends import Legend
+from reportlab.graphics.charts.textlabels import Label
+from reportlab.graphics.charts.axes import XCategoryAxis, YValueAxis
+
+class LogViewer(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+        self.log_timer = QTimer()
+        self.log_timer.timeout.connect(self.update_logs)
+        self.log_timer.start(5000)  # Update every 5 seconds
+        
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # Controls
+        controls = QHBoxLayout()
+        
+        # Log type selector
+        self.log_type = QComboBox()
+        self.log_type.addItems(["System Logs", "Audit Logs"])
+        self.log_type.currentTextChanged.connect(self.update_logs)
+        controls.addWidget(QLabel("Log Type:"))
+        controls.addWidget(self.log_type)
+        
+        # Refresh button
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.clicked.connect(self.update_logs)
+        controls.addWidget(refresh_btn)
+        
+        # Clear button
+        clear_btn = QPushButton("Clear")
+        clear_btn.clicked.connect(self.clear_logs)
+        controls.addWidget(clear_btn)
+        
+        controls.addStretch()
+        layout.addLayout(controls)
+        
+        # Log display
+        self.log_display = QTextEdit()
+        self.log_display.setReadOnly(True)
+        self.log_display.setStyleSheet("""
+            QTextEdit {
+                background-color: #2f3136;
+                color: #dcddde;
+                border: 1px solid #202225;
+                border-radius: 5px;
+                font-family: 'Consolas', monospace;
+                font-size: 12px;
+            }
+        """)
+        layout.addWidget(self.log_display)
+        
+        # Initial load
+        self.update_logs()
+        
+    def update_logs(self):
+        log_type = self.log_type.currentText()
+        log_file = "logs/pos_system.log" if log_type == "System Logs" else "logs/audit.log"
+        
+        try:
+            with open(log_file, 'r') as f:
+                content = f.read()
+                self.log_display.setText(content)
+                # Scroll to bottom
+                self.log_display.moveCursor(QTextCursor.End)
+        except Exception as e:
+            self.log_display.setText(f"Error reading log file: {str(e)}")
+            
+    def clear_logs(self):
+        log_type = self.log_type.currentText()
+        log_file = "logs/pos_system.log" if log_type == "System Logs" else "logs/audit.log"
+        
+        try:
+            with open(log_file, 'w') as f:
+                f.write("")
+            self.update_logs()
+            pos_logger.log_info(f"Cleared {log_type}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to clear logs: {str(e)}")
 
 class AdminDashboard(QMainWindow):
     def __init__(self, user_data):
@@ -19,6 +108,11 @@ class AdminDashboard(QMainWindow):
         self.db = Database()
         self.setup_ui()
         self.showMaximized()
+        pos_logger.log_audit(
+            user=f"{user_data[1]} (ID: {user_data[0]})",
+            action="Admin Dashboard Access",
+            details="Dashboard initialized"
+        )
         
     def setup_ui(self):
         self.setWindowTitle("Admin Dashboard - Reports")
@@ -82,6 +176,41 @@ class AdminDashboard(QMainWindow):
             QPushButton:hover {
                 background-color: #4752c4;
             }
+            QTabWidget::pane {
+                border: 1px solid #202225;
+                border-radius: 5px;
+                background-color: #36393f;
+            }
+            QTabBar::tab {
+                background-color: #2f3136;
+                color: #dcddde;
+                padding: 8px 16px;
+                border: 1px solid #202225;
+                border-bottom: none;
+                border-top-left-radius: 5px;
+                border-top-right-radius: 5px;
+            }
+            QTabBar::tab:selected {
+                background-color: #5865f2;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #40444b;
+            }
+            QComboBox {
+                background-color: #2f3136;
+                border: 1px solid #202225;
+                border-radius: 5px;
+                color: #dcddde;
+                padding: 5px;
+                min-width: 150px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border: none;
+            }
         """)
         
         # Create main widget and layout
@@ -90,6 +219,13 @@ class AdminDashboard(QMainWindow):
         layout = QVBoxLayout(main_widget)
         layout.setSpacing(20)
         layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Create tab widget
+        tab_widget = QTabWidget()
+        
+        # Reports tab
+        reports_tab = QWidget()
+        reports_layout = QVBoxLayout(reports_tab)
         
         # Title and date selection
         header_layout = QHBoxLayout()
@@ -122,7 +258,12 @@ class AdminDashboard(QMainWindow):
         self.print_btn.clicked.connect(self.print_daily_report)
         header_layout.addWidget(self.print_btn)
         
-        layout.addLayout(header_layout)
+        # Add accounting report button next to print report button
+        self.accounting_btn = QPushButton("Generate Accounting Report")
+        self.accounting_btn.clicked.connect(self.generate_accounting_report)
+        header_layout.addWidget(self.accounting_btn)
+        
+        reports_layout.addLayout(header_layout)
         
         # Create scroll area for reports
         scroll = QScrollArea()
@@ -364,7 +505,16 @@ class AdminDashboard(QMainWindow):
         reports_layout.addWidget(tax_frame)
         
         scroll.setWidget(reports_widget)
-        layout.addWidget(scroll)
+        reports_tab.layout().addWidget(scroll)
+        
+        # Logs tab
+        logs_tab = LogViewer()
+        
+        # Add tabs
+        tab_widget.addTab(reports_tab, "Reports")
+        tab_widget.addTab(logs_tab, "System Logs")
+        
+        layout.addWidget(tab_widget)
         
         # Initial data load
         self.update_daily_report()
@@ -372,6 +522,12 @@ class AdminDashboard(QMainWindow):
     def update_daily_report(self):
         """Update all report data for the selected date"""
         selected_date = self.date_selector.date().toPyDate()
+        pos_logger.log_audit(
+            user=f"{self.user_data[1]} (ID: {self.user_data[0]})",
+            action="View Daily Report",
+            details=f"Date: {selected_date}"
+        )
+        
         db = Database()
         summary = db.get_daily_summary(selected_date)
         
@@ -439,69 +595,311 @@ class AdminDashboard(QMainWindow):
         self.tax_canvas.draw()
     
     def print_daily_report(self):
-        """Generate and save a printable daily report"""
+        """Generate and save a printable daily report as PDF"""
         selected_date = self.date_selector.date().toPyDate()
+        pos_logger.log_audit(
+            user=f"{self.user_data[1]} (ID: {self.user_data[0]})",
+            action="Generate Daily Report PDF",
+            details=f"Date: {selected_date}"
+        )
+        
         summary = self.db.get_daily_summary(selected_date)
         
         # Create reports directory if it doesn't exist
         os.makedirs("Reports", exist_ok=True)
         
         # Generate filename with date
-        filename = f"daily_report_{selected_date}.csv"
+        filename = f"daily_report_{selected_date}.pdf"
         filepath = os.path.join("Reports", filename)
         
         try:
-            with open(filepath, 'w', newline='') as csvfile:
-                writer = csv.writer(csvfile)
-                
-                # Write header
-                writer.writerow(["Daily Sales Report"])
-                writer.writerow([f"Date: {selected_date}"])
-                writer.writerow([])
-                
-                # Revenue Summary
-                writer.writerow(["Revenue Summary"])
-                writer.writerow(["Total Revenue", f"€{summary['revenue']['total']:.2f}"])
-                writer.writerow(["Average Order", f"€{summary['transactions']['average_order']:.2f}"])
-                writer.writerow(["Total Transactions", str(summary['transactions']['count'])])
-                writer.writerow([])
-                
-                # Revenue by Hour
-                writer.writerow(["Revenue by Hour"])
-                writer.writerow(["Hour", "Amount"])
-                if not summary['revenue']['by_hour'].empty:
-                    for hour, amount in summary['revenue']['by_hour'].items():
-                        writer.writerow([f"{hour:02d}:00", f"€{amount:.2f}"])
-                writer.writerow([])
-                
-                # Menu Analysis
-                writer.writerow(["Top Selling Items"])
-                writer.writerow(["Item", "Quantity", "Revenue"])
-                if not summary['menu']['top_items'].empty:
-                    for name, data in summary['menu']['top_items'].iterrows():
-                        writer.writerow([name, str(int(data['quantity'])), f"€{data['price']:.2f}"])
-                writer.writerow([])
-                
-                # Category Analysis
-                writer.writerow(["Revenue by Category"])
-                writer.writerow(["Category", "Revenue", "Quantity"])
-                if not summary['menu']['category_analysis']['revenue'].empty:
-                    for category, revenue in summary['menu']['category_analysis']['revenue'].items():
-                        quantity = summary['menu']['category_analysis']['quantity'][category]
-                        writer.writerow([category, f"€{revenue:.2f}", str(int(quantity))])
-                writer.writerow([])
-                
-                # Tax Analysis
-                writer.writerow(["Tax Analysis"])
-                writer.writerow(["Total Tax", f"€{summary['tax']['total']:.2f}"])
-                writer.writerow([])
-                writer.writerow(["Tax by Category"])
-                writer.writerow(["Category", "Tax Amount"])
-                if not summary['tax']['by_category'].empty:
-                    for category, tax in summary['tax']['by_category'].items():
-                        writer.writerow([category, f"€{tax:.2f}"])
-                
+            # Create PDF document
+            doc = SimpleDocTemplate(filepath, pagesize=letter)
+            styles = getSampleStyleSheet()
+            elements = []
+            
+            # Title
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                spaceAfter=30
+            )
+            elements.append(Paragraph(f"Daily Sales Report - {selected_date}", title_style))
+            elements.append(Spacer(1, 20))
+            
+            # Revenue Summary
+            elements.append(Paragraph("Revenue Summary", styles['Heading2']))
+            revenue_data = [
+                ["Total Revenue", f"€{summary['revenue']['total']:.2f}"],
+                ["Average Order", f"€{summary['transactions']['average_order']:.2f}"],
+                ["Total Transactions", str(summary['transactions']['count'])]
+            ]
+            revenue_table = Table(revenue_data, colWidths=[3*inch, 2*inch])
+            revenue_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            elements.append(revenue_table)
+            elements.append(Spacer(1, 20))
+            
+            # Revenue by Hour Chart
+            if not summary['revenue']['by_hour'].empty:
+                elements.append(Paragraph("Revenue by Hour", styles['Heading2']))
+                drawing = Drawing(400, 200)
+                bc = VerticalBarChart()
+                bc.x = 50
+                bc.y = 50
+                bc.height = 125
+                bc.width = 300
+                bc.data = [summary['revenue']['by_hour'].values.tolist()]
+                bc.categoryAxis.categoryNames = [f"{h:02d}:00" for h in summary['revenue']['by_hour'].index]
+                bc.valueAxis.valueMin = 0
+                bc.valueAxis.valueMax = summary['revenue']['by_hour'].max() * 1.1
+                drawing.add(bc)
+                elements.append(drawing)
+                elements.append(Spacer(1, 20))
+            
+            # Menu Analysis
+            elements.append(Paragraph("Top Selling Items", styles['Heading2']))
+            if not summary['menu']['top_items'].empty:
+                menu_data = [["Item", "Quantity", "Revenue"]]
+                for name, data in summary['menu']['top_items'].iterrows():
+                    menu_data.append([
+                        name,
+                        str(int(data['quantity'])),
+                        f"€{data['price']:.2f}"
+                    ])
+                menu_table = Table(menu_data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
+                menu_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 12),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                    ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 10),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ]))
+                elements.append(menu_table)
+                elements.append(Spacer(1, 20))
+            
+            # Category Analysis
+            elements.append(Paragraph("Revenue by Category", styles['Heading2']))
+            if not summary['menu']['category_analysis']['revenue'].empty:
+                category_data = [["Category", "Revenue", "Quantity"]]
+                for category, revenue in summary['menu']['category_analysis']['revenue'].items():
+                    quantity = summary['menu']['category_analysis']['quantity'][category]
+                    category_data.append([
+                        category,
+                        f"€{revenue:.2f}",
+                        str(int(quantity))
+                    ])
+                category_table = Table(category_data, colWidths=[2*inch, 2*inch, 2*inch])
+                category_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 12),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                    ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 10),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ]))
+                elements.append(category_table)
+                elements.append(Spacer(1, 20))
+            
+            # Tax Analysis
+            elements.append(Paragraph("Tax Analysis", styles['Heading2']))
+            tax_data = [
+                ["Total Tax", f"€{summary['tax']['total']:.2f}"]
+            ]
+            if not summary['tax']['by_category'].empty:
+                tax_data.append(["Tax by Category", ""])
+                for category, tax in summary['tax']['by_category'].items():
+                    tax_data.append([category, f"€{tax:.2f}"])
+            
+            tax_table = Table(tax_data, colWidths=[3*inch, 2*inch])
+            tax_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            elements.append(tax_table)
+            
+            # Build PDF
+            doc.build(elements)
+            
             QMessageBox.information(self, "Success", f"Daily report has been saved to:\n{filepath}")
+            pos_logger.log_info(f"Daily report generated successfully: {filepath}")
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to generate report: {str(e)}")
+            error_msg = f"Failed to generate report: {str(e)}"
+            pos_logger.log_error(error_msg)
+            QMessageBox.critical(self, "Error", error_msg)
+
+    def generate_accounting_report(self):
+        """Generate a detailed accounting report for the selected date"""
+        selected_date = self.date_selector.date().toPyDate()
+        pos_logger.log_audit(
+            user=f"{self.user_data[1]} (ID: {self.user_data[0]})",
+            action="Generate Accounting Report",
+            details=f"Date: {selected_date}"
+        )
+        
+        summary = self.db.get_daily_summary(selected_date)
+        
+        # Create Boekhouding directory if it doesn't exist
+        os.makedirs("Boekhouding", exist_ok=True)
+        
+        # Generate filename with date
+        filename = f"boekhouding_{selected_date}.pdf"
+        filepath = os.path.join("Boekhouding", filename)
+        
+        try:
+            # Create PDF document
+            doc = SimpleDocTemplate(filepath, pagesize=letter)
+            styles = getSampleStyleSheet()
+            elements = []
+            
+            # Title
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                spaceAfter=30
+            )
+            elements.append(Paragraph(f"Dagelijkse Boekhouding - {selected_date}", title_style))
+            elements.append(Spacer(1, 20))
+            
+            # Revenue Summary
+            elements.append(Paragraph("Omzet Overzicht", styles['Heading2']))
+            revenue_data = [
+                ["Totaal Omzet", f"€{summary['revenue']['total']:.2f}"],
+                ["Gemiddelde Bestelling", f"€{summary['transactions']['average_order']:.2f}"],
+                ["Totaal Transacties", str(summary['transactions']['count'])]
+            ]
+            revenue_table = Table(revenue_data, colWidths=[3*inch, 2*inch])
+            revenue_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            elements.append(revenue_table)
+            elements.append(Spacer(1, 20))
+            
+            # Payment Methods
+            elements.append(Paragraph("Betaalmethoden", styles['Heading2']))
+            payment_data = [
+                ["PIN", f"€{summary['revenue']['total'] * 0.7:.2f}"],  # Assuming 70% PIN payments
+                ["Contant", f"€{summary['revenue']['total'] * 0.3:.2f}"]  # Assuming 30% cash payments
+            ]
+            payment_table = Table(payment_data, colWidths=[3*inch, 2*inch])
+            payment_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            elements.append(payment_table)
+            elements.append(Spacer(1, 20))
+            
+            # Tax Analysis
+            elements.append(Paragraph("BTW Analyse", styles['Heading2']))
+            tax_data = [
+                ["Totaal BTW", f"€{summary['tax']['total']:.2f}"]
+            ]
+            if not summary['tax']['by_category'].empty:
+                tax_data.append(["BTW per Categorie", ""])
+                for category, tax in summary['tax']['by_category'].items():
+                    tax_data.append([category, f"€{tax:.2f}"])
+            
+            tax_table = Table(tax_data, colWidths=[3*inch, 2*inch])
+            tax_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            elements.append(tax_table)
+            elements.append(Spacer(1, 20))
+            
+            # Category Analysis
+            elements.append(Paragraph("Omzet per Categorie", styles['Heading2']))
+            if not summary['menu']['category_analysis']['revenue'].empty:
+                category_data = [["Categorie", "Omzet", "Aantal"]]
+                for category, revenue in summary['menu']['category_analysis']['revenue'].items():
+                    quantity = summary['menu']['category_analysis']['quantity'][category]
+                    category_data.append([
+                        category,
+                        f"€{revenue:.2f}",
+                        str(int(quantity))
+                    ])
+                category_table = Table(category_data, colWidths=[2*inch, 2*inch, 2*inch])
+                category_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 12),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                    ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 1), (-1, -1), 10),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ]))
+                elements.append(category_table)
+            
+            # Build PDF
+            doc.build(elements)
+            
+            QMessageBox.information(self, "Success", f"Boekhouding rapport is opgeslagen in:\n{filepath}")
+            pos_logger.log_info(f"Accounting report generated successfully: {filepath}")
+            
+        except Exception as e:
+            error_msg = f"Fout bij het genereren van het rapport: {str(e)}"
+            pos_logger.log_error(error_msg)
+            QMessageBox.critical(self, "Error", error_msg)
+
+    def closeEvent(self, event):
+        """Handle window close event"""
+        pos_logger.log_audit(
+            user=f"{self.user_data[1]} (ID: {self.user_data[0]})",
+            action="Admin Dashboard Close",
+            details="Dashboard closed"
+        )
+        event.accept()

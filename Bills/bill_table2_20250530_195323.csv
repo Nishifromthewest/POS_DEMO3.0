@@ -1,0 +1,21 @@
+Restaurant Bill
+""
+Table Number: 2
+Order Taken By: Nishi
+Date: 2025-05-30 19:53:23
+""
+Item,Quantity,Price,Total
+Green Tea Ice Cream,1,€5.50,€5.50
+Green Tea Ice Cream,1,€5.50,€5.50
+Green Tea Ice Cream,1,€5.50,€5.50
+""
+Subtotal,,,€16.50
+Tip,,,€0.00
+Total,,,€16.50
+""
+Payment Details
+Payment Method: CASH
+Amount Received: €16.50
+Change: €0.00
+""
+Thank you for your business!
