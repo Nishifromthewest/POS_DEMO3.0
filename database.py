@@ -5,6 +5,8 @@ from datetime import datetime, time
 import os
 import pandas as pd
 import numpy as np
+import hashlib
+import secrets
 
 class Database:
     def __init__(self, db_name: str = "pos_system.db"):
@@ -14,18 +16,34 @@ class Database:
         os.makedirs("Kitchen_tickets", exist_ok=True)
         self.init_db()
 
+    def _hash_password(self, password: str, salt: str = None) -> Tuple[str, str]:
+        """Hash a password with a salt"""
+        if salt is None:
+            salt = secrets.token_hex(16)
+        key = hashlib.pbkdf2_hmac(
+            'sha256',
+            password.encode('utf-8'),
+            salt.encode('utf-8'),
+            100000  # Number of iterations
+        )
+        return hashlib.sha256(key).hexdigest(), salt
+
     def init_db(self):
         """Initialize the database with required tables"""
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         
-        # Create users table
+        # Create users table with security features
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
+                name TEXT NOT NULL UNIQUE,
                 role TEXT NOT NULL CHECK(role IN ('admin', 'staff')),
-                pin TEXT NOT NULL
+                pin TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                last_login TIMESTAMP,
+                failed_attempts INTEGER DEFAULT 0,
+                account_locked BOOLEAN DEFAULT 0
             )
         ''')
         
@@ -82,15 +100,17 @@ class Database:
         # Create default admin user if not exists
         cursor.execute("SELECT * FROM users WHERE role = 'admin'")
         if not cursor.fetchone():
+            hashed_pin, salt = self._hash_password("1234")
             cursor.execute(
-                "INSERT INTO users (name, role, pin) VALUES (?, ?, ?)",
-                ("Admin", "admin", "1234")
+                "INSERT INTO users (name, role, pin, salt) VALUES (?, ?, ?, ?)",
+                ("Admin", "admin", hashed_pin, salt)
             )
             
-        # Insert default Japanese menu items if not exists
+        # Insert default menu items if not exists
         cursor.execute("SELECT COUNT(*) FROM menu_items")
         if cursor.fetchone()[0] == 0:
             menu_items = [
+                # Japanese Food Items
                 ("Miso Soup", "Starters", 4.50, "Traditional Japanese soup with tofu and seaweed"),
                 ("Edamame", "Starters", 5.50, "Steamed soybeans with sea salt"),
                 ("Gyoza", "Starters", 7.50, "Pan-fried dumplings with pork and vegetables"),
@@ -100,7 +120,37 @@ class Database:
                 ("Chicken Teriyaki", "Main Dishes", 15.50, "Grilled chicken with teriyaki sauce"),
                 ("Beef Ramen", "Main Dishes", 14.50, "Noodles in beef broth with vegetables"),
                 ("Vegetable Tempura", "Side Dishes", 7.50, "Assorted vegetables in crispy batter"),
-                ("Green Tea Ice Cream", "Desserts", 5.50, "Traditional Japanese dessert")
+                ("Green Tea Ice Cream", "Desserts", 5.50, "Traditional Japanese dessert"),
+                
+                # Hot Drinks
+                ("Coffee", "Hot Drinks", 2.50, "Fresh brewed coffee"),
+                ("Cappuccino", "Hot Drinks", 3.50, "Espresso with steamed milk and foam"),
+                ("Green Tea", "Hot Drinks", 2.00, "Traditional Japanese green tea"),
+                ("Hot Chocolate", "Hot Drinks", 3.00, "Rich and creamy hot chocolate"),
+                
+                # Cold Drinks
+                ("Cola", "Cold Drinks", 2.50, "Refreshing cola"),
+                ("Fanta", "Cold Drinks", 2.50, "Orange flavored soda"),
+                ("Sprite", "Cold Drinks", 2.50, "Lemon-lime flavored soda"),
+                ("Mineral Water", "Cold Drinks", 2.00, "Sparkling mineral water"),
+                
+                # Beers
+                ("Pils", "Beers", 3.00, "Light lager beer"),
+                ("Special Beer", "Beers", 3.50, "Premium craft beer"),
+                ("Dark Beer", "Beers", 3.50, "Rich and malty dark beer"),
+                ("Wheat Beer", "Beers", 4.00, "Smooth wheat beer"),
+                
+                # Wines
+                ("Red Wine", "Wines", 4.00, "House red wine"),
+                ("White Wine", "Wines", 4.00, "House white wine"),
+                ("Rosé Wine", "Wines", 4.00, "House rosé wine"),
+                ("Prosecco", "Wines", 5.00, "Italian sparkling wine"),
+                
+                # Cocktails
+                ("Mojito", "Cocktails", 8.50, "White rum, mint, lime, and soda"),
+                ("Caipirinha", "Cocktails", 8.50, "Cachaça, lime, and sugar"),
+                ("Margarita", "Cocktails", 8.50, "Tequila, lime, and triple sec"),
+                ("Pina Colada", "Cocktails", 9.00, "Rum, coconut cream, and pineapple juice")
             ]
             cursor.executemany(
                 "INSERT INTO menu_items (name, category, price, description) VALUES (?, ?, ?, ?)",
@@ -111,13 +161,20 @@ class Database:
         conn.close()
 
     def add_user(self, name: str, role: str, pin: str) -> bool:
-        """Add a new user to the database"""
+        """Add a new user to the database with hashed password"""
         try:
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
+            
+            # Check if username already exists
+            cursor.execute("SELECT id FROM users WHERE name = ?", (name,))
+            if cursor.fetchone():
+                return False
+                
+            hashed_pin, salt = self._hash_password(pin)
             cursor.execute(
-                "INSERT INTO users (name, role, pin) VALUES (?, ?, ?)",
-                (name, role, pin)
+                "INSERT INTO users (name, role, pin, salt) VALUES (?, ?, ?, ?)",
+                (name, role, hashed_pin, salt)
             )
             conn.commit()
             conn.close()
@@ -147,16 +204,56 @@ class Database:
         return users
 
     def verify_user(self, name: str, pin: str) -> Optional[Tuple]:
-        """Verify user credentials and return user data if valid"""
+        """Verify user credentials with password hashing"""
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
+        
+        # Get user data including salt
         cursor.execute(
-            "SELECT id, name, role FROM users WHERE name = ? AND pin = ?",
-            (name, pin)
+            "SELECT id, name, role, pin, salt, account_locked, failed_attempts FROM users WHERE name = ?",
+            (name,)
         )
         user = cursor.fetchone()
-        conn.close()
-        return user
+        
+        if not user:
+            conn.close()
+            return None
+            
+        user_id, user_name, role, stored_pin, salt, account_locked, failed_attempts = user
+        
+        # Check if account is locked
+        if account_locked:
+            conn.close()
+            return None
+            
+        # Verify password
+        hashed_pin, _ = self._hash_password(pin, salt)
+        
+        if hashed_pin == stored_pin:
+            # Reset failed attempts and update last login
+            cursor.execute(
+                "UPDATE users SET failed_attempts = 0, last_login = CURRENT_TIMESTAMP WHERE id = ?",
+                (user_id,)
+            )
+            conn.commit()
+            conn.close()
+            return (user_id, user_name, role)
+        else:
+            # Increment failed attempts
+            failed_attempts += 1
+            if failed_attempts >= 5:
+                cursor.execute(
+                    "UPDATE users SET failed_attempts = ?, account_locked = 1 WHERE id = ?",
+                    (failed_attempts, user_id)
+                )
+            else:
+                cursor.execute(
+                    "UPDATE users SET failed_attempts = ? WHERE id = ?",
+                    (failed_attempts, user_id)
+                )
+            conn.commit()
+            conn.close()
+            return None
 
     def get_menu_items(self) -> List[Tuple]:
         """Get all menu items"""

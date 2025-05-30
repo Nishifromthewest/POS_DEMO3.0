@@ -116,6 +116,47 @@ class AdminDashboard(QMainWindow):
         
     def setup_ui(self):
         self.setWindowTitle("Admin Dashboard - Reports")
+        
+        # Create main widget and layout
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        main_layout = QVBoxLayout(main_widget)
+        
+        # Create header with user info and logout button
+        header = QHBoxLayout()
+        user_label = QLabel(f"Welcome, {self.user_data[1]}")
+        user_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        header.addWidget(user_label)
+        
+        header.addStretch()
+        
+        logout_btn = QPushButton("Logout")
+        logout_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ed4245;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #c03537;
+            }
+        """)
+        logout_btn.clicked.connect(self.logout)
+        header.addWidget(logout_btn)
+        
+        main_layout.addLayout(header)
+        
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        main_layout.addWidget(self.tab_widget)
+        
+        # Add tabs
+        self.setup_daily_report_tab()
+        self.setup_accounting_report_tab()
+        self.setup_logs_tab()
+        
+        # Set the style
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #36393f;
@@ -198,34 +239,58 @@ class AdminDashboard(QMainWindow):
             }
             QComboBox {
                 background-color: #2f3136;
+                color: #dcddde;
                 border: 1px solid #202225;
                 border-radius: 5px;
-                color: #dcddde;
                 padding: 5px;
-                min-width: 150px;
             }
             QComboBox::drop-down {
                 border: none;
             }
             QComboBox::down-arrow {
-                image: none;
+                image: url(down_arrow.png);
+                width: 12px;
+                height: 12px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #2f3136;
+                color: #dcddde;
+                border: 1px solid #202225;
+                selection-background-color: #5865f2;
+            }
+            QDateEdit {
+                background-color: #2f3136;
+                color: #dcddde;
+                border: 1px solid #202225;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QDateEdit::drop-down {
                 border: none;
+            }
+            QDateEdit::down-arrow {
+                image: url(down_arrow.png);
+                width: 12px;
+                height: 12px;
             }
         """)
         
-        # Create main widget and layout
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        layout = QVBoxLayout(main_widget)
-        layout.setSpacing(20)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        # Create tab widget
-        tab_widget = QTabWidget()
-        
-        # Reports tab
-        reports_tab = QWidget()
-        reports_layout = QVBoxLayout(reports_tab)
+    def logout(self):
+        """Handle logout action"""
+        pos_logger.log_audit(
+            user=f"{self.user_data[1]} (ID: {self.user_data[0]})",
+            action="Logout",
+            details="User logged out from admin dashboard"
+        )
+        self.close()
+        from login import LoginWindow
+        self.login_window = LoginWindow()
+        self.login_window.show()
+
+    def setup_daily_report_tab(self):
+        """Setup the daily report tab with all its components"""
+        daily_tab = QWidget()
+        layout = QVBoxLayout(daily_tab)
         
         # Title and date selection
         header_layout = QHBoxLayout()
@@ -240,16 +305,6 @@ class AdminDashboard(QMainWindow):
         self.date_selector.setCalendarPopup(True)
         self.date_selector.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.date_selector.setMinimumWidth(150)
-        self.date_selector.setStyleSheet("""
-            QDateEdit {
-                background-color: #2f3136;
-                border: 1px solid #202225;
-                border-radius: 5px;
-                color: #dcddde;
-                padding: 8px;
-                font-size: 14px;
-            }
-        """)
         self.date_selector.dateChanged.connect(self.update_daily_report)
         header_layout.addWidget(self.date_selector)
         
@@ -258,37 +313,17 @@ class AdminDashboard(QMainWindow):
         self.print_btn.clicked.connect(self.print_daily_report)
         header_layout.addWidget(self.print_btn)
         
-        # Add accounting report button next to print report button
+        # Add accounting report button
         self.accounting_btn = QPushButton("Generate Accounting Report")
         self.accounting_btn.clicked.connect(self.generate_accounting_report)
         header_layout.addWidget(self.accounting_btn)
         
-        reports_layout.addLayout(header_layout)
+        layout.addLayout(header_layout)
         
         # Create scroll area for reports
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        scroll.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: #36393f;
-            }
-            QScrollBar:vertical {
-                border: none;
-                background-color: #2f3136;
-                width: 12px;
-                margin: 0px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #202225;
-                min-height: 20px;
-                border-radius: 6px;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-        """)
         
         reports_widget = QWidget()
         reports_layout = QVBoxLayout(reports_widget)
@@ -432,23 +467,6 @@ class AdminDashboard(QMainWindow):
         self.top_items_table.setHorizontalHeaderLabels(["Item", "Quantity", "Revenue"])
         self.top_items_table.horizontalHeader().setStretchLastSection(True)
         self.top_items_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.top_items_table.setStyleSheet("""
-            QTableWidget {
-                background-color: #40444b;
-                border: none;
-                border-radius: 10px;
-                gridline-color: #2f3136;
-            }
-            QHeaderView::section {
-                background-color: #2f3136;
-                padding: 10px;
-                border: none;
-                font-weight: bold;
-            }
-            QTableWidget::item {
-                padding: 8px;
-            }
-        """)
         menu_layout.addWidget(self.top_items_table)
         
         # Menu chart
@@ -505,20 +523,52 @@ class AdminDashboard(QMainWindow):
         reports_layout.addWidget(tax_frame)
         
         scroll.setWidget(reports_widget)
-        reports_tab.layout().addWidget(scroll)
+        layout.addWidget(scroll)
         
-        # Logs tab
-        logs_tab = LogViewer()
-        
-        # Add tabs
-        tab_widget.addTab(reports_tab, "Reports")
-        tab_widget.addTab(logs_tab, "System Logs")
-        
-        layout.addWidget(tab_widget)
+        self.tab_widget.addTab(daily_tab, "Daily Reports")
         
         # Initial data load
         self.update_daily_report()
-    
+
+    def setup_accounting_report_tab(self):
+        """Setup the accounting report tab"""
+        accounting_tab = QWidget()
+        layout = QVBoxLayout(accounting_tab)
+        
+        # Title and date selection
+        header_layout = QHBoxLayout()
+        title = QLabel("Accounting Reports")
+        title.setFont(QFont("Arial", 24, QFont.Bold))
+        title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        header_layout.addWidget(title)
+        
+        # Date selector
+        self.accounting_date_selector = QDateEdit()
+        self.accounting_date_selector.setDate(QDate.currentDate())
+        self.accounting_date_selector.setCalendarPopup(True)
+        self.accounting_date_selector.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.accounting_date_selector.setMinimumWidth(150)
+        header_layout.addWidget(self.accounting_date_selector)
+        
+        # Generate report button
+        generate_btn = QPushButton("Generate Accounting Report")
+        generate_btn.clicked.connect(self.generate_accounting_report)
+        header_layout.addWidget(generate_btn)
+        
+        layout.addLayout(header_layout)
+        
+        # Add some information text
+        info_text = QLabel("Generate detailed accounting reports including revenue, tax, and payment method analysis.")
+        info_text.setWordWrap(True)
+        layout.addWidget(info_text)
+        
+        self.tab_widget.addTab(accounting_tab, "Accounting Reports")
+
+    def setup_logs_tab(self):
+        """Setup the logs tab"""
+        logs_tab = LogViewer()
+        self.tab_widget.addTab(logs_tab, "System Logs")
+
     def update_daily_report(self):
         """Update all report data for the selected date"""
         selected_date = self.date_selector.date().toPyDate()

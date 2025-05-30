@@ -1,0 +1,22 @@
+Restaurant Bill
+""
+Table Number: 1
+Order Taken By: Loui
+Date: 2025-05-30 20:18:14
+""
+Item,Quantity,Price,Total
+Miso Soup,1,€4.50,€4.50
+Tuna Roll,1,€8.50,€8.50
+Vegetable Tempura,1,€7.50,€7.50
+Green Tea Ice Cream,1,€5.50,€5.50
+""
+Subtotal,,,€26.00
+Tip,,,€0.00
+Total,,,€26.00
+""
+Payment Details
+Payment Method: SPLIT
+Split into: 2.0 ways
+Amount per person: €13.00
+""
+Thank you for your business!

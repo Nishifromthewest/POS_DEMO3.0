@@ -1,179 +1,260 @@
-# POS3: Geavanceerd Restaurant Management Systeem
+# Geavanceerd Point of Sale Systeem voor Japanse Restaurants
 
-## Samenvatting
-POS3 is een geavanceerd Point of Sale (POS) systeem dat gebruik maakt van moderne Python-technologieën om een robuuste, schaalbare en gebruiksvriendelijke restaurantmanagementoplossing te bieden. Dit systeem vertegenwoordigt een uitgebreide integratie van data-analyse, real-time verwerking en intuïtief gebruikersinterfaceontwerp, specifiek ontwikkeld voor de horeca.
+## Abstract
+Dit project presenteert een geavanceerd Point of Sale (POS) systeem, specifiek ontwikkeld voor Japanse restaurants. Het systeem integreert moderne software-engineering principes met praktische restaurantmanagement functionaliteiten. Door gebruik te maken van Python's PyQt5 framework en SQLite database technologie, biedt het systeem een robuuste, schaalbare en gebruiksvriendelijke oplossing voor de horeca sector.
+
+## Inhoudsopgave
+1. [Inleiding](#inleiding)
+2. [Technische Architectuur](#technische-architectuur)
+3. [Systeem Features](#systeem-features)
+4. [Implementatie Details](#implementatie-details)
+5. [Security Implementatie](#security-implementatie)
+6. [Installatie & Configuratie](#installatie--configuratie)
+7. [Gebruikershandleiding](#gebruikershandleiding)
+8. [Best Practices & Onderhoud](#best-practices--onderhoud)
+9. [Troubleshooting & Support](#troubleshooting--support)
+10. [Toekomstige Ontwikkelingen](#toekomstige-ontwikkelingen)
+
+## Inleiding
+
+### Doelstelling
+Dit POS systeem is ontwikkeld met als primaire doelstelling het optimaliseren van restaurantoperaties door:
+- Automatisering van bestel- en betalingsprocessen
+- Real-time monitoring van verkoopdata
+- Geavanceerde rapportage en analyse
+- Verbeterde gebruikerservaring voor zowel staff als management
+
+### Technische Stack
+- **Frontend**: PyQt5 (Python GUI Framework)
+- **Backend**: Python 3.8+
+- **Database**: SQLite3
+- **Data Analyse**: Pandas, NumPy
+- **Visualisatie**: Matplotlib
+- **Rapportage**: ReportLab
 
 ## Technische Architectuur
 
-### Kern Technologieën
+### Systeem Design
+Het systeem volgt een modulaire architectuur met de volgende componenten:
 
-#### PyQt5 Framework
-- **Implementatie**: Gebruikt PyQt5's Model-View-Controller (MVC) architectuur voor robuust UI-beheer
-- **Belangrijke Kenmerken**:
-  - Aangepaste widget-ontwikkeling voor gespecialiseerde restaurantoperaties
-  - Event-gestuurde architectuur voor real-time updates
-  - Thread-veilige operaties voor gelijktijdige gebruikersinteracties
-  - Responsief ontwerp voor optimale gebruikerservaring
+1. **Presentatie Laag**
+   - Gebruikersinterface (PyQt5)
+   - Real-time updates
+   - Responsief design
 
-#### Pandas Integratie
-- **Data Analyse Engine**:
-  - Hoogwaardige DataFrame-operaties voor transactieverwerking
-  - Tijdreeksanalyse voor verkoopvoorspelling
-  - Geavanceerde aggregatiefuncties voor business intelligence
-  - Geheugenefficiënte datastructuren voor grootschalige operaties
-- **Implementatie Details**:
-  ```python
-  # Voorbeeld van verkoopanalyse implementatie
-  import pandas as pd
-  
-  def analyseer_dagelijkse_verkopen(data):
-      df = pd.DataFrame(data)
-      return df.groupby('categorie')['omzet'].agg(['som', 'gemiddelde', 'aantal'])
-  ```
+2. **Business Logic Laag**
+   - Transactieverwerking
+   - Data validatie
+   - Business rules implementatie
 
-#### Matplotlib Visualisatie
-- **Data Visualisatie Laag**:
-  - Real-time grafiekgeneratie voor bedrijfsmetrieken
-  - Aangepaste styling voor professionele presentatie
-  - Interactieve plotmogelijkheden
-  - Exportfunctionaliteit voor rapporten
+3. **Data Access Laag**
+   - Database operaties
+   - Data persistentie
+   - Query optimalisatie
 
-### Systeemcomponenten
+### Database Schema
+```sql
+-- Gebruikers Tabel
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    name TEXT UNIQUE,
+    role TEXT CHECK(role IN ('admin', 'staff')),
+    pin TEXT,
+    salt TEXT,
+    last_login TIMESTAMP,
+    failed_attempts INTEGER DEFAULT 0,
+    account_locked BOOLEAN DEFAULT 0
+);
 
-#### 1. Database Management Systeem
-- **Technologie**: SQLite3 met aangepaste ORM-implementatie
-- **Kenmerken**:
-  - ACID-compliant voor transactie-integriteit
-  - Geoptimaliseerde queryprestaties
-  - Geautomatiseerde backupsystemen
-  - Datavalidatie en -sanitization
+-- Menu Items Tabel
+CREATE TABLE menu_items (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    category TEXT,
+    price REAL,
+    description TEXT
+);
 
-#### 2. Gebruikersinterface Architectuur
-- **Ontwerppatronen**:
-  - Observer-patroon voor real-time updates
-  - Factory-patroon voor dynamische UI-generatie
-  - Singleton-patroon voor resourcemanagement
-- **Componentstructuur**:
-  ```
-  UI/
-  ├── Componenten/
-  │   ├── MenuManager
-  │   ├── OrderProcessor
-  │   └── RapportGenerator
-  ├── Weergaven/
-  │   ├── AdminDashboard
-  │   ├── RestaurantView
-  │   └── GebruikersInterface
-  └── Controllers/
-      ├── DataController
-      ├── EventController
-      └── StateController
-  ```
-
-#### 3. Bedrijfslogica Laag
-- **Implementatie**:
-  - Modulair ontwerp voor onderhoudbaarheid
-  - Service-georiënteerde architectuur
-  - Event-gestuurde verwerking
-  - Foutafhandeling en herstelsystemen
-
-## Technische Vereisten
-
-### Ontwikkelingsomgeving
-- Python 3.8+ (gebruik van type hints en moderne syntax)
-- PyQt5 5.15.0+ (voor UI-componenten)
-- Pandas 2.2.0+ (voor datamanipulatie)
-- Matplotlib 3.8.0+ (voor visualisatie)
-- SQLite3 (voor datapersistentie)
-
-### Systeemafhankelijkheden
-```bash
-# Kern dependencies
-PyQt5>=5.15.0
-pandas>=2.2.0
-matplotlib>=3.8.0
-numpy>=1.24.0
-python-dateutil>=2.8.2
-pytz>=2023.3
+-- Bestellingen Tabel
+CREATE TABLE orders (
+    id INTEGER PRIMARY KEY,
+    table_number INTEGER,
+    user_id INTEGER,
+    status TEXT,
+    created_at TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
 ```
+
+## Systeem Features
+
+### Gebruikersbeheer
+- **Authenticatie Systeem**
+  - PBKDF2-gebaseerde PIN hashing
+  - Rol-gebaseerde toegangscontrole (RBAC)
+  - Brute force bescherming
+  - Session management
+
+### Menu Management
+- **Categorisatie**
+  - Hiërarchische menu structuur
+  - Dynamische categorie management
+  - Prijs management
+  - Voorraad tracking
+
+### Bestellingen
+- **Order Processing**
+  - Real-time order tracking
+  - Tafel management
+  - Order geschiedenis
+  - Status updates
+
+### Betalingen
+- **Transactie Verwerking**
+  - Multi-payment method support
+  - BTW berekening
+  - Bon generatie
+  - Kassa afsluiting
+
+### Rapportage
+- **Analytics Engine**
+  - Real-time data analyse
+  - Grafische visualisatie
+  - Export functionaliteit
+  - Custom rapport generatie
 
 ## Implementatie Details
 
-### Dataverwerkingspijplijn
-1. **Dataverzameling**
-   - Real-time transactieopname
-   - Gebruikersinteractie logging
-   - Systeemstatusmonitoring
+### Security Implementatie
+1. **Authenticatie**
+   ```python
+   def hash_password(pin, salt=None):
+       if salt is None:
+           salt = os.urandom(32)
+       key = hashlib.pbkdf2_hmac(
+           'sha256',
+           pin.encode('utf-8'),
+           salt,
+           100000
+       )
+       return key, salt
+   ```
 
-2. **Datatransformatie**
-   - Pandas DataFrame operaties
-   - Tijdreeksanalyse
-   - Statistische berekeningen
+2. **Data Validatie**
+   ```python
+   def validate_input(data, rules):
+       for field, rule in rules.items():
+           if not rule.validate(data.get(field)):
+               raise ValidationError(f"Invalid {field}")
+   ```
 
-3. **Datavisualisatie**
-   - Matplotlib integratie
-   - Aangepaste grafiekgeneratie
-   - Exportmogelijkheden
+### Performance Optimalisatie
+- Query caching
+- Lazy loading
+- Connection pooling
+- Batch processing
 
-### Prestatieoptimalisatie
-- **Geheugenbeheer**:
-  - Efficiënte datastructuren
-  - Garbage collection optimalisatie
-  - Resource pooling
+## Installatie & Configuratie
 
-- **Queryoptimalisatie**:
-  - Geïndexeerde databaseoperaties
-  - Gecachte resultaten
-  - Batchverwerking
+### Systeemvereisten
+- Python 3.8+
+- SQLite3
+- PyQt5
+- Pandas
+- Matplotlib
+- ReportLab
 
-## Installatie en Implementatie
+### Installatie Stappen
+1. **Environment Setup**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   venv\Scripts\activate     # Windows
+   ```
 
-### Ontwikkelingsomgeving
-```bash
-# Repository klonen
-git clone https://github.com/Nishifromthewest/POS_DEMO3.0.git
-cd POS_DEMO3.0
+2. **Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# Virtuele omgeving aanmaken
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
+3. **Database Initialisatie**
+   ```bash
+   python database.py
+   ```
 
-# Dependencies installeren
-pip install -r requirements.txt
+## Gebruikershandleiding
 
-# Applicatie starten
-python main.py
-```
+### Admin Dashboard
+1. **Login**
+   - Gebruikersnaam: admin
+   - PIN: 1234 (wijzig na eerste login)
 
-### Productie-implementatie
-- Docker containerisatie ondersteuning
-- Geautomatiseerde test suite
-- CI/CD pipeline integratie
-- Monitoring en logging systemen
+2. **Rapportage**
+   - Selecteer datum
+   - Kies rapport type
+   - Exporteer naar PDF
 
-## Bijdrage Richtlijnen
+### Staff Interface
+1. **Bestellingen**
+   - Tafel selectie
+   - Menu navigatie
+   - Aantal aanpassen
+   - Bestelling bevestigen
 
-### Ontwikkelingsworkflow
-1. Fork repository
-2. Maak feature branch
-3. Implementeer wijzigingen
-4. Voer test suite uit
-5. Dien pull request in
+## Best Practices & Onderhoud
 
-### Code Standaarden
-- PEP 8 compliant
-- Type hinting
-- Uitgebreide documentatie
-- Unit test dekking
+### Database Management
+- Dagelijkse backups
+- Index optimalisatie
+- Query performance monitoring
+- Data integriteit checks
+
+### Security Protocol
+- Regelmatige PIN updates
+- Access control reviews
+- Audit log analyse
+- Security patches
+
+## Troubleshooting & Support
+
+### Diagnostische Tools
+- Log analyse
+- Performance monitoring
+- Error tracking
+- Database diagnostics
+
+### Support Procedures
+1. Log analyse
+2. Error reproduction
+3. Solution implementation
+4. Documentation update
+
+## Toekomstige Ontwikkelingen
+
+### Geplande Features
+1. **Mobile Integration**
+   - Tablet support
+   - Mobile ordering
+   - QR code scanning
+
+2. **Advanced Analytics**
+   - Machine learning voor sales forecasting
+   - Customer behavior analysis
+   - Inventory optimization
+
+3. **Cloud Integration**
+   - Multi-location support
+   - Real-time synchronization
+   - Remote management
+
+## Conclusie
+Dit POS systeem vertegenwoordigt een moderne aanpak van restaurantmanagement, waarbij technische innovatie wordt gecombineerd met praktische functionaliteit. De modulaire architectuur en uitgebreide feature set maken het systeem geschikt voor zowel kleine als grote Japanse restaurants.
+
+## Referenties
+1. PyQt5 Documentation
+2. SQLite Best Practices
+3. Python Security Guidelines
+4. Restaurant Management Systems Research
 
 ## Licentie
-Dit project is gelicenseerd onder de MIT Licentie - zie het [LICENSE](LICENSE) bestand voor details.
-
-## Auteur
-[Uw Naam] - [Uw E-mail]
-
-## Dankbetuigingen
-- PyQt5 ontwikkelteam
-- Pandas en NumPy communities
-- Matplotlib bijdragers 
+Dit project is gelicenseerd onder de MIT License - zie het LICENSE bestand voor details. 
