@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt, QSize, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 from database import Database
 from tablemanager import RestaurantView
+from admin_dashboard import AdminDashboard
 
 class PinDialog(QDialog):
     def __init__(self, username, parent=None):
@@ -227,8 +228,9 @@ class LoginScreen(QMainWindow):
                 QMessageBox.warning(self, "Error", "Invalid PIN!")
                 
     def show_user_management(self):
-        # TODO: Show user management interface
-        QMessageBox.information(self, "Success", "Admin login successful!")
+        self.admin_dashboard = AdminDashboard(self.current_user)
+        self.admin_dashboard.show()
+        self.close()
         
     def show_restaurant_view(self):
         self.restaurant_view = RestaurantView(self.current_user)

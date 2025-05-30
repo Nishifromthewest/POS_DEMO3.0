@@ -1,0 +1,21 @@
+Restaurant Bill
+""
+Table Number: 3
+Order Taken By: Nishi
+Date: 2025-05-30 18:20:26
+""
+Item,Quantity,Price,Total
+Green Tea Ice Cream,1,€5.50,€5.50
+Green Tea Ice Cream,1,€5.50,€5.50
+California Roll,1,€8.50,€8.50
+""
+Subtotal,,,€19.50
+Tip,,,€0.00
+Total,,,€19.50
+""
+Payment Details
+Payment Method: SPLIT
+Split into: 4.0 ways
+Amount per person: €4.88
+""
+Thank you for your business!

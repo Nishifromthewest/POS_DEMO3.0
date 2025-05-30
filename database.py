@@ -1,7 +1,7 @@
 import sqlite3
 from typing import List, Tuple, Optional
 import csv
-from datetime import datetime
+from datetime import datetime, time
 import os
 import pandas as pd
 import numpy as np
@@ -214,11 +214,21 @@ class Database:
         try:
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
+            
+            # First delete related transactions
+            cursor.execute("DELETE FROM transactions WHERE order_id = ?", (order_id,))
+            
+            # Then delete order items
             cursor.execute("DELETE FROM order_items WHERE order_id = ?", (order_id,))
+            
+            # Finally delete the order
+            cursor.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+            
             conn.commit()
             conn.close()
             return True
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            print(f"Error while deleting order items: {str(e)}")
             return False
 
     def update_order_status(self, order_id: int, status: str) -> bool:
@@ -262,16 +272,20 @@ class Database:
             conn = sqlite3.connect(self.db_name)
             cursor = conn.cursor()
             
-            # First delete all order items
+            # First delete all transactions
+            cursor.execute("DELETE FROM transactions")
+            
+            # Then delete all order items
             cursor.execute("DELETE FROM order_items")
             
-            # Then delete all orders
+            # Finally delete all orders
             cursor.execute("DELETE FROM orders")
             
             conn.commit()
             conn.close()
             return True
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            print(f"Error while clearing all orders: {str(e)}")
             return False
 
     def get_active_order_for_table(self, table_number: int) -> Optional[int]:
@@ -337,28 +351,227 @@ class Database:
             return False
 
     def get_daily_revenue(self, date):
-        """Get total revenue for a specific date"""
-        conn = sqlite3.connect(self.db_name)
-        query = """
-            SELECT created_at, amount, payment_method, tip_amount
-            FROM transactions
-            WHERE DATE(created_at) = ?
-        """
-        df = pd.read_sql_query(query, conn, params=(date,))
-        conn.close()
-        
-        if df.empty:
+        """Get daily revenue summary"""
+        try:
+            conn = sqlite3.connect(self.db_name)
+            cursor = conn.cursor()
+            
+            # Get transactions for the day
+            start_date = f"{date} 00:00:00"
+            end_date = f"{date} 23:59:59"
+            
+            cursor.execute("""
+                SELECT created_at, amount 
+                FROM transactions 
+                WHERE created_at BETWEEN ? AND ?
+            """, (start_date, end_date))
+            
+            transactions = cursor.fetchall()
+            
+            if not transactions:
+                return {
+                    'total_revenue': 0.0,
+                    'hourly_revenue': pd.Series(),
+                    'transaction_count': 0
+                }
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(transactions, columns=['created_at', 'amount'])
+            df['created_at'] = pd.to_datetime(df['created_at'])
+            
+            # Calculate metrics
+            total_revenue = df['amount'].sum()
+            hourly_revenue = df.groupby(df['created_at'].dt.hour)['amount'].sum()
+            
+            return {
+                'total_revenue': total_revenue,
+                'hourly_revenue': hourly_revenue,
+                'transaction_count': len(transactions)
+            }
+            
+        except sqlite3.Error as e:
+            print(f"Error getting daily revenue: {str(e)}")
             return {
                 'total_revenue': 0.0,
                 'hourly_revenue': pd.Series(),
-                'revenue_by_payment': pd.Series()
+                'transaction_count': 0
+            }
+        finally:
+            conn.close()
+            
+    def get_daily_transaction_count(self, date):
+        """Get count of transactions for a specific day"""
+        try:
+            conn = sqlite3.connect(self.db_name)
+            cursor = conn.cursor()
+            
+            start_date = f"{date} 00:00:00"
+            end_date = f"{date} 23:59:59"
+            
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM transactions 
+                WHERE created_at BETWEEN ? AND ?
+            """, (start_date, end_date))
+            
+            return cursor.fetchone()[0]
+            
+        except sqlite3.Error as e:
+            print(f"Error getting transaction count: {str(e)}")
+            return 0
+        finally:
+            conn.close()
+            
+    def get_daily_guest_count(self, date):
+        """Get count of unique guests for a specific day"""
+        try:
+            conn = sqlite3.connect(self.db_name)
+            cursor = conn.cursor()
+            
+            start_date = f"{date} 00:00:00"
+            end_date = f"{date} 23:59:59"
+            
+            cursor.execute("""
+                SELECT COUNT(DISTINCT table_number) 
+                FROM transactions 
+                WHERE created_at BETWEEN ? AND ?
+            """, (start_date, end_date))
+            
+            return cursor.fetchone()[0]
+            
+        except sqlite3.Error as e:
+            print(f"Error getting guest count: {str(e)}")
+            return 0
+        finally:
+            conn.close()
+            
+    def get_daily_summary(self, date):
+        """Get comprehensive daily summary"""
+        try:
+            conn = sqlite3.connect(self.db_name)
+            cursor = conn.cursor()
+            
+            start_date = f"{date} 00:00:00"
+            end_date = f"{date} 23:59:59"
+            
+            # Get transactions with order details
+            cursor.execute("""
+                SELECT t.created_at, t.amount, o.table_number, t.user_id,
+                       oi.menu_item_id, oi.quantity, mi.price,
+                       mi.name, mi.category
+                FROM transactions t
+                JOIN orders o ON t.order_id = o.id
+                JOIN order_items oi ON o.id = oi.order_id
+                JOIN menu_items mi ON oi.menu_item_id = mi.id
+                WHERE t.created_at BETWEEN ? AND ?
+            """, (start_date, end_date))
+            
+            transactions = cursor.fetchall()
+            
+            if not transactions:
+                return {
+                    'revenue': {
+                        'total': 0.0,
+                        'by_hour': pd.Series()
+                    },
+                    'transactions': {
+                        'count': 0,
+                        'average_order': 0.0,
+                        'hourly_distribution': pd.Series()
+                    },
+                    'menu': {
+                        'top_items': pd.DataFrame(),
+                        'category_analysis': {
+                            'revenue': pd.Series(),
+                            'quantity': pd.Series()
+                        }
+                    },
+                    'tax': {
+                        'total': 0.0,
+                        'by_category': pd.Series()
+                    }
+                }
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(transactions, columns=[
+                'created_at', 'amount', 'table_number', 'user_id',
+                'menu_item_id', 'quantity', 'price',
+                'item_name', 'category'
+            ])
+            df['created_at'] = pd.to_datetime(df['created_at'])
+            
+            # Calculate revenue metrics
+            total_revenue = df['amount'].sum()
+            hourly_revenue = df.groupby(df['created_at'].dt.hour)['amount'].sum()
+            
+            # Calculate transaction metrics
+            transaction_count = len(df['amount'].unique())
+            average_order = total_revenue / transaction_count if transaction_count > 0 else 0
+            hourly_transactions = df.groupby(df['created_at'].dt.hour)['amount'].count()
+            
+            # Calculate menu metrics
+            top_items = df.groupby('item_name').agg({
+                'quantity': 'sum',
+                'price': lambda x: (x * df.loc[x.index, 'quantity']).sum()
+            }).sort_values('quantity', ascending=False)
+            
+            category_revenue = df.groupby('category')['amount'].sum()
+            category_quantity = df.groupby('category')['quantity'].sum()
+            
+            # Calculate tax metrics
+            tax_rate = 0.21  # 21% VAT
+            total_tax = total_revenue * tax_rate
+            tax_by_category = category_revenue * tax_rate
+            
+            return {
+                'revenue': {
+                    'total': total_revenue,
+                    'by_hour': hourly_revenue
+                },
+                'transactions': {
+                    'count': transaction_count,
+                    'average_order': average_order,
+                    'hourly_distribution': hourly_transactions
+                },
+                'menu': {
+                    'top_items': top_items,
+                    'category_analysis': {
+                        'revenue': category_revenue,
+                        'quantity': category_quantity
+                    }
+                },
+                'tax': {
+                    'total': total_tax,
+                    'by_category': tax_by_category
+                }
             }
             
-        return {
-            'total_revenue': df['amount'].sum(),
-            'hourly_revenue': df.groupby(df['created_at'].dt.hour)['amount'].sum(),
-            'revenue_by_payment': df.groupby('payment_method')['amount'].sum()
-        }
+        except sqlite3.Error as e:
+            print(f"Error getting daily summary: {str(e)}")
+            return {
+                'revenue': {
+                    'total': 0.0,
+                    'by_hour': pd.Series()
+                },
+                'transactions': {
+                    'count': 0,
+                    'average_order': 0.0,
+                    'hourly_distribution': pd.Series()
+                },
+                'menu': {
+                    'top_items': pd.DataFrame(),
+                    'category_analysis': {
+                        'revenue': pd.Series(),
+                        'quantity': pd.Series()
+                    }
+                },
+                'tax': {
+                    'total': 0.0,
+                    'by_category': pd.Series()
+                }
+            }
+        finally:
+            conn.close()
 
     def get_daily_tips(self, date):
         """Get total tips for a specific date"""
@@ -496,47 +709,6 @@ class Database:
             'tax_by_hour': df.groupby(df['created_at'].dt.hour)['tax_amount'].sum()
         }
 
-    def get_daily_summary(self, date):
-        """Get a comprehensive daily summary"""
-        revenue_data = self.get_daily_revenue(date)
-        tips_data = self.get_daily_tips(date)
-        transaction_data = self.get_daily_transaction_analysis(date)
-        menu_data = self.get_daily_menu_analysis(date)
-        tax_data = self.get_daily_tax_analysis(date)
-        
-        summary = {
-            'date': date,
-            'revenue': {
-                'total': revenue_data['total_revenue'],
-                'by_hour': revenue_data['hourly_revenue'],
-                'by_payment': revenue_data['revenue_by_payment']
-            },
-            'tips': {
-                'total': tips_data['total_tips'],
-                'by_payment': tips_data['tips_by_payment'],
-                'by_hour': tips_data['tips_by_hour']
-            },
-            'transactions': {
-                'count': transaction_data['transaction_count'],
-                'average_order': transaction_data['average_order'],
-                'hourly_distribution': transaction_data['hourly_transactions'],
-                'table_analysis': transaction_data['table_analysis'],
-                'server_analysis': transaction_data['server_analysis']
-            },
-            'menu': {
-                'top_items': menu_data['top_items'],
-                'category_analysis': menu_data['category_analysis'],
-                'hourly_sales': menu_data['hourly_sales']
-            },
-            'tax': {
-                'total': tax_data['total_tax'],
-                'by_category': tax_data['tax_by_category'],
-                'by_hour': tax_data['tax_by_hour']
-            }
-        }
-        
-        return summary
-
     def get_daily_average_order(self, date):
         """Get average order value for a specific date"""
         conn = sqlite3.connect(self.db_name)
@@ -547,32 +719,6 @@ class Database:
             WHERE DATE(created_at) = ?
         """, (date,))
         result = cursor.fetchone()[0] or 0.0
-        conn.close()
-        return result
-
-    def get_daily_transaction_count(self, date):
-        """Get number of transactions for a specific date"""
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT COUNT(*)
-            FROM transactions
-            WHERE DATE(created_at) = ?
-        """, (date,))
-        result = cursor.fetchone()[0] or 0
-        conn.close()
-        return result
-
-    def get_daily_guest_count(self, date):
-        """Get total number of guests for a specific date"""
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT COUNT(DISTINCT table_number)
-            FROM orders
-            WHERE DATE(created_at) = ?
-        """, (date,))
-        result = cursor.fetchone()[0] or 0
         conn.close()
         return result
 

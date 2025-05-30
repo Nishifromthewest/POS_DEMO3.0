@@ -1,0 +1,23 @@
+Restaurant Bill
+""
+Table Number: 2
+Order Taken By: Nishi
+Date: 2025-05-30 18:20:02
+""
+Item,Quantity,Price,Total
+California Roll,1,€8.50,€8.50
+California Roll,1,€8.50,€8.50
+California Roll,1,€8.50,€8.50
+California Roll,1,€8.50,€8.50
+Green Tea Ice Cream,1,€5.50,€5.50
+""
+Subtotal,,,€39.50
+Tip,,,€5.00
+Total,,,€44.50
+""
+Payment Details
+Payment Method: CASH
+Amount Received: €45.50
+Change: €1.00
+""
+Thank you for your business!

@@ -1,0 +1,21 @@
+Restaurant Bill
+""
+Table Number: 1
+Order Taken By: Nishi
+Date: 2025-05-30 18:19:35
+""
+Item,Quantity,Price,Total
+Miso Soup,1,€4.50,€4.50
+California Roll,1,€8.50,€8.50
+Vegetable Tempura,1,€7.50,€7.50
+""
+Subtotal,,,€20.50
+Tip,,,€0.00
+Total,,,€20.50
+""
+Payment Details
+Payment Method: CASH
+Amount Received: €20.50
+Change: €0.00
+""
+Thank you for your business!
