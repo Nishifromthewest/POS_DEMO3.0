@@ -282,10 +282,31 @@ class AdminDashboard(QMainWindow):
             action="Logout",
             details="User logged out from admin dashboard"
         )
+        # Create and show login screen
+        from login import LoginScreen
+        self.login_screen = LoginScreen()
+        self.login_screen.login_successful.connect(self.handle_login)
+        self.login_screen.show()
+        # Close current window
         self.close()
-        from login import LoginWindow
-        self.login_window = LoginWindow()
-        self.login_window.show()
+
+    def handle_login(self, user_data):
+        """Handle successful login"""
+        user_id, user_name, role = user_data
+        if role == 'admin':
+            # Show admin dashboard for admin users
+            self.admin_dashboard = AdminDashboard(user_data)
+            self.admin_dashboard.show()
+            pos_logger.log_info(f"Admin dashboard opened for user: {user_name}")
+        else:
+            # Show restaurant view for staff users
+            from tablemanager import RestaurantView
+            self.restaurant_view = RestaurantView(user_data)
+            self.restaurant_view.show()
+            pos_logger.log_info(f"Restaurant view opened for user: {user_name}")
+        
+        # Close login screen
+        self.login_screen.close()
 
     def setup_daily_report_tab(self):
         """Setup the daily report tab with all its components"""

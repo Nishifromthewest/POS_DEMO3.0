@@ -2,6 +2,8 @@ import logging
 import os
 from datetime import datetime
 import json
+import traceback
+import sys
 
 class POSLogger:
     _instance = None
@@ -26,6 +28,12 @@ class POSLogger:
         security_formatter = logging.Formatter(
             '%(asctime)s - %(levelname)s - Event: %(event)s - Details: %(details)s - IP: %(ip)s'
         )
+        error_formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - File: %(filename)s - Line: %(lineno)d - Function: %(funcName)s - Error: %(message)s\nStack Trace: %(stack_trace)s'
+        )
+        performance_formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - Operation: %(operation)s - Duration: %(duration)s - Details: %(details)s'
+        )
 
         # Create handlers
         system_handler = logging.FileHandler('logs/system.log')
@@ -36,6 +44,12 @@ class POSLogger:
 
         security_handler = logging.FileHandler('logs/security.log')
         security_handler.setFormatter(security_formatter)
+
+        error_handler = logging.FileHandler('logs/error.log')
+        error_handler.setFormatter(error_formatter)
+
+        performance_handler = logging.FileHandler('logs/performance.log')
+        performance_handler.setFormatter(performance_formatter)
 
         # Create loggers
         self.system_logger = logging.getLogger('system')
@@ -50,13 +64,31 @@ class POSLogger:
         self.security_logger.setLevel(logging.INFO)
         self.security_logger.addHandler(security_handler)
 
+        self.error_logger = logging.getLogger('error')
+        self.error_logger.setLevel(logging.ERROR)
+        self.error_logger.addHandler(error_handler)
+
+        self.performance_logger = logging.getLogger('performance')
+        self.performance_logger.setLevel(logging.INFO)
+        self.performance_logger.addHandler(performance_handler)
+
     def log_info(self, message: str):
         """Log general system information"""
         self.system_logger.info(message)
 
-    def log_error(self, message: str):
-        """Log system errors"""
-        self.system_logger.error(message)
+    def log_error(self, message: str, exc_info=None):
+        """Log system errors with stack trace"""
+        if exc_info:
+            stack_trace = ''.join(traceback.format_exception(*exc_info))
+        else:
+            stack_trace = ''.join(traceback.format_stack())
+        
+        self.error_logger.error(
+            message,
+            extra={
+                'stack_trace': stack_trace
+            }
+        )
 
     def log_warning(self, message: str):
         """Log system warnings"""
@@ -103,6 +135,53 @@ class POSLogger:
                 'event': event,
                 'details': details,
                 'ip': ip
+            }
+        )
+
+    def log_performance(self, operation: str, duration: float, details: str = ""):
+        """Log performance metrics"""
+        self.performance_logger.info(
+            "",
+            extra={
+                'operation': operation,
+                'duration': f"{duration:.2f}s",
+                'details': details
+            }
+        )
+
+    def log_database_operation(self, operation: str, table: str, details: str = ""):
+        """Log database operations"""
+        self.system_logger.info(
+            f"Database {operation} on table {table}",
+            extra={'details': details}
+        )
+
+    def log_api_call(self, endpoint: str, method: str, status: int, duration: float):
+        """Log API calls"""
+        self.performance_logger.info(
+            "",
+            extra={
+                'operation': f"API {method} {endpoint}",
+                'duration': f"{duration:.2f}s",
+                'details': f"Status: {status}"
+            }
+        )
+
+    def log_file_operation(self, operation: str, filename: str, details: str = ""):
+        """Log file operations"""
+        self.system_logger.info(
+            f"File {operation}: {filename}",
+            extra={'details': details}
+        )
+
+    def log_config_change(self, setting: str, old_value: str, new_value: str):
+        """Log configuration changes"""
+        self.audit_logger.info(
+            "",
+            extra={
+                'user': 'system',
+                'action': 'config_change',
+                'details': f"Changed {setting} from {old_value} to {new_value}"
             }
         )
 

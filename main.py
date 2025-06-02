@@ -8,9 +8,14 @@ import sys
 class POSSystem:
     def __init__(self):
         self.app = QApplication(sys.argv)
+        self.show_login()
+        pos_logger.log_info("POS System initialized")
+        
+    def show_login(self):
+        """Show the login screen"""
         self.login_screen = LoginScreen()
         self.login_screen.login_successful.connect(self.handle_login)
-        pos_logger.log_info("POS System initialized")
+        self.login_screen.show()
         
     def handle_login(self, user_data):
         # user_data contains (id, name, role)
@@ -36,7 +41,6 @@ class POSSystem:
         self.login_screen.close()
     
     def run(self):
-        self.login_screen.show()
         pos_logger.log_info("POS System started")
         return self.app.exec_()
 

@@ -5,6 +5,11 @@ from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QColor, QPainter, QPen, QBrush
 from ordermenu import OrderMenu
 from database import Database
+from logger import POSLogger
+
+
+
+logger = POSLogger()
 
 class TableWidget(QFrame):
     def __init__(self, table_number, user_data, parent=None):
